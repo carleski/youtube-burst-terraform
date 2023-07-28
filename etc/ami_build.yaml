@@ -1,0 +1,62 @@
+name: youtube-burst-ec2-swarm
+description: AMI build doc for creating a YouTube Burst project image
+schemaVersion: 1.0
+
+phases:
+  - name: build
+    steps:
+      - name: disable-ssh-reverse-dns-check
+        action: ExecuteBash
+        inputs:
+          commands:
+            - echo "UseDNS no" >> /etc/ssh/sshd_config
+      - name: install-deps
+        action: ExecuteBash
+        inputs:
+          commands:
+            - yum install -y make automake gcc g++ subversion python3-dev zip git xauth
+      - name: download-chrome
+        action: WebDownload
+        maxAttempts: 3
+        inputs:
+          - source: https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm
+            destination: /tmp/google-chrome-stable_current_x86_64.rpm
+      - name: install-chrome
+        action: ExecuteBash
+        inputs:
+          commands:
+            - yum install -y /tmp/google-chrome-stable_current_x86_64.rpm
+      - name: download-anaconda
+        action: WebDownload
+        maxAttempts: 3
+        inputs:
+          - source: https://repo.anaconda.com/archive/Anaconda3-2022.05-Linux-x86_64.sh
+            destination: /tmp/Anaconda3-2022.05-Linux-x86_64.sh
+      - name: ensure-anaconda-executable
+        action: SetFilePermissions
+        inputs:
+          - path: /tmp/Anaconda3-2022.05-Linux-x86_64.sh
+            permissions: 755
+      - name: install-anaconda
+        action: ExecuteBash
+        inputs:
+          commands:
+            - bash /tmp/Anaconda3-2022.05-Linux-x86_64.sh -b -p /home/ec2-user/anaconda
+      - name: git-pull-project
+        action: ExecuteBash
+        inputs:
+          commands:
+            - git clone https://github.com/avliu-um/youtube-burst.git /home/ec2-user/youtube-burst
+            - chown -R ec2-user:ec2-user /home/ec2-user/youtube-burst
+            - touch /etc/cron.d/youtube-burst && echo "*/2 * * * * ec2-user cd /home/ec2-user/youtube-burst && git pull -q" >> /etc/cron.d/youtube-burst
+      - name: conda-setup
+        action: ExecuteBash
+        inputs:
+          commands:
+            - /home/ec2-user/anaconda/bin/conda update -n base -c defaults conda
+            - /home/ec2-user/anaconda/bin/conda env create -f /home/ec2-user/youtube-burst/environment.yml
+      - name: conda-startup
+        action: ExecuteBash
+        inputs:
+          commands:
+            - sudo -u ec2-user /home/ec2-user/anaconda/bin/conda init bash
